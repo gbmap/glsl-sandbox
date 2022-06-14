@@ -66,17 +66,39 @@ vec3 cdir(vec3 cpos, vec2 uv, vec3 look, float fov) {
     );
 }
 
+vec2 position2uv(vec3 p, vec3 o) {
+
+    return vec2(
+        atan(p.y, p.z) / (-2.*3.14159268), 
+        asin(p.x) / 3.14159268 + 0.5
+    );
+
+
+    p = p - o;
+    return normalize(vec2(
+        (acos(dot(normalize(vec3(p.x, 0., p.z)), vec3(0., 0., 1.)))+1.)*.5,
+        (acos(dot(normalize(vec3(0., p.y, p.z)), vec3(0., 1., 0.)))+1.)*.5
+    ));
+}
+
+float mat_color(vec2 uv) {
+    vec2 id = ceil(uv*10.);
+    return uv.x;
+    return length(fract(uv*2.-1.)*10.)-0.1;
+}
+
 void main() {
     vec2 uv = gl_FragCoord.xy / u_resolution.xy;
     uv.x *= u_resolution.x / u_resolution.y;
     uv -= vec2(0.5);
     uv *= 2.;
 
-    vec3 cpos = vec3(0., 1., -10.00);
-    cpos.xy += (vec2(
+    vec3 cpos = vec3(0., 1., 0.00);
+    vec2 orbit = (vec2(
         u_mouse.x/u_resolution.x,
         u_mouse.y/u_resolution.y
-    )*2.-1.)*10.;
+    )*2.-1.)*3.14159268*2.;
+    cpos += vec3(cos(orbit.x)*7., 0., sin(orbit.x)*7.);
 
     float sdf = 100.;
 
@@ -95,11 +117,14 @@ void main() {
 
     if (sdf <= 0.01)
     {
-    vec3 color = m_color(scene.y);
-    color = albedo(color, rpos, n, vec3(3., 3., -3.5));
-    
-    //color = mix(n, vec3(0.), clamp(scene.x,0.,1.));
-    gl_FragColor = vec4(color, 1.0);
+        vec3 color = m_color(scene.y);
+        color = albedo(color, rpos, n, vec3(3., 3., -3.5));
+        color.xy = position2uv(rpos, vec3(0.));
+        color = vec3(mat_color(position2uv(rpos, vec3(0.))));
+
+        
+        //color = mix(n, vec3(0.), clamp(scene.x,0.,1.));
+        gl_FragColor = vec4(color, 1.0);
     }
     else
     {
