@@ -1,0 +1,7 @@
+{
+    "glsl-canvas.extensions": ["GL_OES_standard_derivatives"],
+    "glsl-canvas.textures": {
+        // "0": "https://rawgit.com/actarian/plausible-brdf-shader/master/textures/noise/cloud-1.png",
+        "0": "https://www.easterngraphics.com/pcon/de/wp-content/uploads/2016/07/HDRI_.jpg",
+    }
+}
