@@ -48,13 +48,16 @@ vec4 sdf_scene(vec3 p)
 {
     float m = 0.;
     float plane = sdf_cube(p-vec3(0.0, -4.0,0.0), vec3(5.0, 1.0, 5.0));
-    m = step(plane, 100.);
+    if (plane < 100.)
+        m = 1.0;
 
     float sphere = length(p) - 3.00; 
+    if (sphere < plane)
+        m = 2.0;
     m = mix(m, 2., step(sphere,plane));
 
     float sdf = min(plane, sphere);
-    m = mix(m, 0., step(length(p), sdf));
+    // m = mix(m, 0., step(length(p), sdf));
     return vec4(sdf, m, 0., 0.);
 }
 
@@ -98,36 +101,6 @@ float albedo(vec3 p, vec3 n, vec3 lpos)
 }
 
 /*
-n1 = index of refraction of the first medium
-n2 = index of refraction of the second medium
-n = normal
-inc = incident ray
-https://blog.demofox.org/2020/06/14/casual-shadertoy-path-tracing-3-fresnel-rough-refraction-absorption-orbit-camera/
-*/
-float fresnel(float n1, float n2, vec3 n, vec3 inc, float r)
-{
-    float r0 = (n1-n2)/(n1+n2);
-    r0 *= r0;
-
-    // Invert dot, so facing away increases reflectance
-    float cosX = -dot(n, inc);
-    if (n1 > n2)
-    {
-        float n = n1/n2;
-        float sinT2 = n*n*(1.0-cosX*cosX);
-        // Total internal reflection
-        if (sinT2 > 1.0)
-            return 1.0;
-        cosX = sqrt(1.0-sinT2);
-    }
-    float x = 1.0 - cosX;
-    float ret = r0+(1.0-r0)*x*x*x*x*x;
-    ret = (r + (1.-r)*ret);
-    return ret;
-    // return mix(f0, f90, ret);
-}
-
-/*
 blinn-phong
 */
 float specular(vec3 p, vec3 rdir, vec3 n, vec3 lpos, float shininess)
@@ -138,12 +111,12 @@ float specular(vec3 p, vec3 rdir, vec3 n, vec3 lpos, float shininess)
     return pow(s, shininess/4.0);
 }
 
-float march(vec3 rpos, vec3 rdir)
+float march(vec3 rpos, vec3 rdir, float side)
 {
     float sdf = 0.;
     for (int i = 0; i < N_STEPS; i++)
     {
-        float a = sdf_scene(rpos).x;
+        float a = sdf_scene(rpos).x * side;
         rpos += rdir * a;
         sdf += a;
         if (a <= 0.01 || a >= 500.) break;
@@ -185,7 +158,7 @@ float shadow(vec3 p, vec3 n, vec3 lpos)
 
             vec3 light_pos = lpos+plane_sampling_pos;
             vec3 plane_lightdir = normalize(light_pos - p);
-            float a = march(p+n*0.05, normalize(plane_lightdir));
+            float a = march(p+n*0.05, normalize(plane_lightdir), 1.0);
             s += a;
         }
         s /= (float(steps));
@@ -224,10 +197,13 @@ vec3 render(vec2 uv)
     uv -= vec2(0.5);
     uv *= 2.;
 
-    vec3 cpos = vec3(0., 1., -10.00);
+    float mx = (u_mouse.x / u_resolution.x)*TWO_PI;
+    float my = (u_mouse.y / u_resolution.y);
+
+    vec3 cpos = vec3(0., 1., -10.00) + vec3(cos(mx)*8., my*2.0-1., sin(mx)*8.)*0.0;
     vec3 rpos = cpos;
     vec3 rdir = normalize(vec3(uv, 1.0));
-    float d = march(rpos, rdir);
+    float d = march(rpos, rdir, 1.0);
     rpos += rdir*d;
 
     vec3 n = normal(rpos);
@@ -242,25 +218,29 @@ vec3 render(vec2 uv)
 
     if (scene.y == 2.0) 
     {
-        float r = 0.35;
-        float f = fresnel(4.9, 5.0, n, rdir, r);
-        // color = mix(color, vec3(1.0, 1.0, 1.0), f);
-        // f = 1.0;
-        float reflectivity = r*sh*f;
-        vec3 reflected_dir = reflect(rdir, n);
-        float reflected_d = march(rpos+n*0.02, reflected_dir);
-        vec3 reflected_pos = rpos + n*reflected_d;
+        // float f = fresnel(rpos, rdir, n, 1.0, 1.5);
+        const float normal_epsilon = 0.02;
+        const float IOR = 1.05;
+        vec3 refracted_dir = refract(rdir, n, 1.0/IOR);
+        float refracted_d = march(rpos-n*normal_epsilon, refracted_dir, -1.0);
+        vec3 refracted_pos = rpos + refracted_dir*refracted_d;
 
-        vec4 scene = sdf_scene(reflected_pos);
+        vec3 refracted_n = -normal(refracted_pos);
+        refracted_dir = refract(refracted_dir, refracted_n, IOR);
 
-        vec3 reflected_color = m_color(scene.y, reflected_pos);
-        float ssh = 0.;
-        reflected_color = shading(scene, reflected_pos, normal(reflected_pos), lpos, reflected_dir, ssh);
-        float reflection = reflectivity/reflected_d;
-        reflection = min(1., max(0., reflection));
+        // total internal reflection, aka no refraction
+        if (dot(refracted_dir, refracted_dir) == 0.0)
+            refracted_dir = reflect(refracted_dir, refracted_n);
 
-        color = mix(color, reflected_color, reflectivity);
-        // color = mix(color, vec3(1.0, 1.0, 1.0), f);
+        refracted_d = march(refracted_pos-refracted_n*normal_epsilon*2., refracted_dir, 1.0);
+        refracted_pos = refracted_pos + refracted_dir*refracted_d;
+
+        vec3 final_n = normal(refracted_pos);
+
+        vec4 scene = sdf_scene(refracted_pos);
+        vec3 refracted_color = shading(scene, refracted_pos, final_n, lpos, refracted_dir, sh);
+        color = mix(color, refracted_color, 1.00);
+        // color = texture2D(u_buffer0, refracted_dir.xy, 1.0).xyz;
     }
 
     return color;
@@ -273,13 +253,12 @@ void main() {
     float dx = dFdx(uv.x);
     float dy = dFdy(uv.y);
 
-    const int samples_count = 5;
-    vec2 samples[5];
+    const int samples_count = 4;
+    vec2 samples[4];
     samples[0] = vec2(0., 0.);
     samples[1] = vec2(dx, 0.0);
-    samples[2] = vec2(-dx, 0.0);
-    samples[3] = vec2(0.0, dy);
-    samples[4] = vec2(0.0, -dy);
+    samples[2] = vec2(0.0, dy);
+    samples[3] = vec2(dx, dy);
 
     vec3 color = vec3(0.0);
     for (int i = 0; i < samples_count; i++)
