@@ -25,7 +25,7 @@ vec4 voronoi(vec2 uv) {
     for (int j = -1; j <= 1; j++)
     {
         vec2 c = vec2(i,j);
-        vec2 delta = c-f+hash2f(p+c)*1.2;
+        vec2 delta = c-f+hash2f(p+c);
         float dist = dot(delta,delta);
         if (dist < y)
             id = hash2f(p+c);
@@ -40,7 +40,7 @@ vec4 voronoi(vec2 uv) {
 void main() {
     vec2 uv = gl_FragCoord.xy / u_resolution.xy;
     
-    float t = voronoi(uv*10.).x;
+    float t = voronoi(uv*2.).x;
     vec3 color = vec3(t);
 
     gl_FragColor = vec4(color, 1.0);

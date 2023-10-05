@@ -59,8 +59,8 @@ blinn-phong
 */
 float specular(vec3 p, vec3 rdir, vec3 n, vec3 lpos, float shininess)
 {
-    vec3 ldir = normalize(lpos - p);
-    vec3 r = reflect(-ldir, n);
+    vec3 ldir = normalize(p - lpos);
+    vec3 r = reflect(ldir, n);
     float s = max(dot(r, -rdir), 0.);
     return pow(s, shininess/4.0);
 }

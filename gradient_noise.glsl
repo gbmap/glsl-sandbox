@@ -60,7 +60,6 @@ float noise(vec2 p, float freq ){
 	float unit = 1./freq;
 	vec2 ij = floor(p/unit);
 	vec2 xy = mod(p,unit)/unit;
-	//xy = 3.*xy*xy-2.*xy*xy*xy;
 	xy = .5*(1.-cos(PI*xy));
 	float a = rand((ij+vec2(0.,0.)));
 	float b = rand((ij+vec2(1.,0.)));
@@ -97,6 +96,6 @@ void main() {
 
     vec2 grad = gradient(floor(uv*10.));
     vec3 color = vec3(grad.x, grad.y, 0.);
-    color = vec3(pNoise(uv,8));
+    color = vec3(gradient_noise(uv,1));
     fragColor = vec4(color, 1.0);
 }
